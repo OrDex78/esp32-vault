@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 Vault — Hardware Wallet Companion</title>
+<meta name="description" content="Open-source hardware wallet companion for ESP32. Air-gapped signing, AES-256 encrypted, BIP32/BIP39 standard.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+/* ── Reset ─────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:     #0a0e12;
+  --paper:   #f2ede6;
+  --steel:   #1c2333;
+  --silver:  #8a9bb0;
+  --lime:    #b8ff57;
+  --sky:     #57c8ff;
+  --rose:    #ff5757;
+  --gold:    #f5c842;
+  --mono:    'DM Mono', monospace;
+  --sans:    'Syne', sans-serif;
+  --radius:  2px;
+}
+
+html{scroll-behavior:smooth}
+
+body{
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Noise texture overlay ── */
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none;
+  z-index:9999;
+  opacity:.5;
+}
+
+/* ── Layout ── */
+.site{
+  max-width:1200px;
+  margin:0 auto;
+  padding:0 24px;
+}
+
+/* ── NAV ── */
+nav{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:20px 0;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  margin-bottom:0;
+}
+
+.nav-logo{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-decoration:none;
+}
+
+.nav-logo-mark{
+  width:32px;
+  height:32px;
+  background:var(--lime);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  color:var(--ink);
+  font-weight:700;
+  flex-shrink:0;
+}
+
+.nav-logo-text{
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:18px;
+  letter-spacing:-0.5px;
+  color:#fff;
+}
+
+.nav-logo-sub{
+  font-family:var(--mono);
+  font-size:10px;
+  color:var(--silver);
+  letter-spacing:2px;
+  text-transform:uppercase;
+  display:block;
+  line-height:1;
+}
+
+.nav-right{display:flex;align-items:center;gap:12px}
+
+.badge-air{
+  background:rgba(184,255,87,.12);
+  border:1px solid rgba(184,255,87,.3);
+  color:var(--lime);
+  font-size:10px;
+  letter-spacing:2px;
+  padding:4px 10px;
+  text-transform:uppercase;
+}
+
+/* ── Connect button ── */
+#btn-connect{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 18px;
+  background:var(--paper);
+  color:var(--ink);
+  border:none;
+  font-family:var(--sans);
+  font-weight:700;
+  font-size:13px;
+  letter-spacing:1px;
+  cursor:pointer;
+  text-transform:uppercase;
+  transition:all .15s;
+}
+#btn-connect:hover{background:var(--lime)}
+#btn-connect.connected{background:var(--lime)}
+
+.dot{
+  width:7px;height:7px;
+  border-radius:50%;
+  background:var(--steel);
+  transition:all .3s;
+}
+.dot.live{
+  background:var(--lime);
+  box-shadow:0 0 0 3px rgba(184,255,87,.25);
+  animation:pulse .9s ease-in-out infinite alternate;
+}
+@keyframes pulse{to{box-shadow:0 0 0 6px rgba(184,255,87,.1)}}
+
+/* ── HERO ── */
+.hero{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:0;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  min-height:340px;
+}
+
+.hero-left{
+  padding:64px 0 48px;
+  border-right:1px solid rgba(255,255,255,.08);
+  padding-right:48px;
+}
+
+.hero-tag{
+  font-size:10px;
+  letter-spacing:3px;
+  color:var(--lime);
+  text-transform:uppercase;
+  margin-bottom:20px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.hero-tag::before{content:'';width:20px;height:1px;background:var(--lime)}
+
+.hero-title{
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:clamp(36px,5vw,62px);
+  line-height:1.0;
+  letter-spacing:-2px;
+  color:#fff;
+  margin-bottom:20px;
+}
+
+.hero-title span{color:var(--lime)}
+
+.hero-desc{
+  font-size:13px;
+  line-height:1.9;
+  color:var(--silver);
+  max-width:420px;
+  margin-bottom:32px;
+}
+
+.hero-stats{
+  display:flex;
+  gap:32px;
+}
+
+.stat{display:flex;flex-direction:column;gap:4px}
+.stat-val{
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:22px;
+  color:#fff;
+}
+.stat-key{
+  font-size:10px;
+  letter-spacing:2px;
+  color:var(--silver);
+  text-transform:uppercase;
+}
+
+.hero-right{
+  padding:48px 0 48px 48px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:12px;
+}
+
+.feature-row{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  padding:14px 0;
+  border-bottom:1px solid rgba(255,255,255,.05);
+}
+.feature-row:last-child{border-bottom:none}
+
+.feature-icon{
+  width:28px;height:28px;
+  background:rgba(255,255,255,.04);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;flex-shrink:0;
+}
+
+.feature-name{
+  font-family:var(--sans);
+  font-weight:700;
+  font-size:13px;
+  color:#fff;
+  margin-bottom:2px;
+}
+
+.feature-desc{
+  font-size:11px;
+  color:var(--silver);
+  line-height:1.6;
+}
+
+/* ── MAIN CONTENT ── */
+.main{padding:40px 0}
+
+/* ── Screens ── */
+#screen-disconnected,#screen-setup,#screen-dashboard{display:none}
+#screen-disconnected.show,#screen-setup.show,#screen-dashboard.show{display:block}
+
+/* ── CONNECT SCREEN ── */
+.connect-section{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:1px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.06);
+  margin-bottom:40px;
+}
+
+.connect-left,.connect-right{
+  background:var(--ink);
+  padding:40px;
+}
+
+.connect-left{border-right:1px solid rgba(255,255,255,.06)}
+
+.section-label{
+  font-size:10px;
+  letter-spacing:3px;
+  color:var(--silver);
+  text-transform:uppercase;
+  margin-bottom:20px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.section-label::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.06)}
+
+.steps-list{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.step-item{
+  display:flex;
+  gap:16px;
+  align-items:flex-start;
+}
+
+.step-num{
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:11px;
+  color:var(--lime);
+  width:20px;
+  flex-shrink:0;
+  padding-top:2px;
+}
+
+.step-text{
+  font-size:13px;
+  line-height:1.7;
+  color:var(--silver);
+}
+
+.step-text strong{color:var(--paper)}
+
+.connect-cta{
+  margin-top:32px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.btn-main{
+  padding:14px 28px;
+  background:var(--paper);
+  color:var(--ink);
+  border:none;
+  font-family:var(--sans);
+  font-weight:700;
+  font-size:13px;
+  letter-spacing:1px;
+  cursor:pointer;
+  text-transform:uppercase;
+  transition:all .15s;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.btn-main:hover{background:var(--lime);transform:translateY(-1px)}
+
+.btn-ghost{
+  padding:14px 20px;
+  background:transparent;
+  color:var(--silver);
+  border:1px solid rgba(255,255,255,.1);
+  font-family:var(--mono);
+  font-size:12px;
+  cursor:pointer;
+  transition:all .15s;
+  text-decoration:none;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.btn-ghost:hover{border-color:rgba(255,255,255,.3);color:var(--paper)}
+
+.compat-note{
+  font-size:11px;
+  color:rgba(138,155,176,.5);
+  margin-top:12px;
+  font-style:italic;
+}
+
+/* ── SETUP SCREEN ── */
+.setup-banner{
+  border:1px solid rgba(245,200,66,.2);
+  background:rgba(245,200,66,.04);
+  padding:32px 40px;
+  display:flex;
+  gap:24px;
+  align-items:flex-start;
+  margin-bottom:32px;
+}
+.setup-icon{font-size:32px;flex-shrink:0}
+.setup-title{
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:20px;
+  color:var(--gold);
+  margin-bottom:8px;
+}
+.setup-desc{font-size:13px;color:var(--silver);line-height:1.8}
+
+/* ── DASHBOARD ── */
+.dash-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:1px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.06);
+  margin-bottom:1px;
+}
+
+.dash-cell{
+  background:var(--ink);
+  padding:28px;
+  position:relative;
+  transition:background .15s;
+}
+.dash-cell:hover{background:#0d1219}
+
+.cell-label{
+  font-size:10px;
+  letter-spacing:2px;
+  color:var(--silver);
+  text-transform:uppercase;
+  margin-bottom:12px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.cell-label::before{
+  content:'';
+  width:3px;height:3px;
+  background:var(--lime);
+  border-radius:50%;
+}
+
+.cell-val{
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:28px;
+  color:#fff;
+  line-height:1;
+  margin-bottom:4px;
+}
+.cell-unit{font-size:13px;color:var(--silver);font-weight:400}
+
+.cell-addr{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--sky);
+  word-break:break-all;
+  line-height:1.7;
+}
+
+.cell-actions{
+  display:flex;
+  gap:8px;
+  margin-top:12px;
+}
+
+.btn-sm{
+  padding:6px 12px;
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:1px;
+  cursor:pointer;
+  transition:all .15s;
+  text-transform:uppercase;
+  border:none;
+}
+.btn-sm-outline{
+  background:transparent;
+  border:1px solid rgba(255,255,255,.1);
+  color:var(--silver);
+}
+.btn-sm-outline:hover{border-color:var(--lime);color:var(--lime)}
+.btn-sm-solid{
+  background:rgba(87,200,255,.1);
+  color:var(--sky);
+  border:1px solid rgba(87,200,255,.2);
+}
+.btn-sm-solid:hover{background:rgba(87,200,255,.2)}
+.btn-sm.copied{background:rgba(184,255,87,.1)!important;color:var(--lime)!important;border-color:rgba(184,255,87,.3)!important}
+
+.status-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:8px 0;
+  border-bottom:1px solid rgba(255,255,255,.04);
+}
+.status-row:last-child{border-bottom:none}
+.status-key{font-size:11px;color:var(--silver);letter-spacing:1px;text-transform:uppercase}
+.status-badge{
+  font-size:10px;
+  letter-spacing:1px;
+  padding:3px 8px;
+  text-transform:uppercase;
+}
+.sb-green{background:rgba(184,255,87,.1);color:var(--lime);border:1px solid rgba(184,255,87,.2)}
+.sb-blue{background:rgba(87,200,255,.1);color:var(--sky);border:1px solid rgba(87,200,255,.2)}
+.sb-red{background:rgba(255,87,87,.1);color:var(--rose);border:1px solid rgba(255,87,87,.2)}
+
+/* ── TABS ── */
+.tabs-wrap{
+  border-bottom:1px solid rgba(255,255,255,.08);
+  margin-bottom:32px;
+  display:flex;
+  gap:0;
+}
+.tab{
+  padding:14px 20px;
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:2px;
+  color:var(--silver);
+  cursor:pointer;
+  text-transform:uppercase;
+  border-bottom:2px solid transparent;
+  margin-bottom:-1px;
+  transition:all .15s;
+}
+.tab:hover{color:var(--paper)}
+.tab.active{color:var(--lime);border-bottom-color:var(--lime)}
+
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* ── SEND PANEL ── */
+.panel{
+  border:1px solid rgba(255,255,255,.06);
+  background:rgba(255,255,255,.02);
+}
+
+.panel-head{
+  padding:20px 28px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+
+.panel-title{
+  font-family:var(--sans);
+  font-weight:700;
+  font-size:15px;
+  color:#fff;
+}
+
+.panel-body{padding:28px}
+
+.field{margin-bottom:20px}
+.field-label{
+  font-size:10px;
+  letter-spacing:2px;
+  color:var(--silver);
+  text-transform:uppercase;
+  margin-bottom:8px;
+  display:block;
+}
+.field-input{
+  width:100%;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);
+  color:var(--paper);
+  font-family:var(--mono);
+  font-size:13px;
+  padding:12px 16px;
+  outline:none;
+  transition:border-color .15s;
+}
+.field-input:focus{border-color:rgba(184,255,87,.4)}
+.field-input::placeholder{color:rgba(138,155,176,.4)}
+
+select.field-input{
+  cursor:pointer;
+  appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a9bb0'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 14px center;
+  padding-right:36px;
+}
+
+.field-row{display:grid;grid-template-columns:1fr 200px;gap:16px}
+
+.btn-send{
+  width:100%;
+  padding:16px;
+  background:var(--lime);
+  color:var(--ink);
+  border:none;
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:14px;
+  letter-spacing:2px;
+  cursor:pointer;
+  text-transform:uppercase;
+  transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:8px;
+}
+.btn-send:hover{background:#d4ff2a;transform:translateY(-1px)}
+.btn-send:disabled{opacity:.3;cursor:not-allowed;transform:none}
+
+.info-block{
+  background:rgba(87,200,255,.04);
+  border:1px solid rgba(87,200,255,.1);
+  padding:16px 20px;
+  margin-top:20px;
+}
+
+.info-block p{
+  font-size:12px;
+  color:var(--silver);
+  line-height:2;
+}
+
+.info-block span{color:var(--sky)}
+
+/* ── ADDRESSES ── */
+.addr-item{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  padding:16px 20px;
+  border-bottom:1px solid rgba(255,255,255,.04);
+  transition:background .1s;
+}
+.addr-item:last-child{border-bottom:none}
+.addr-item:hover{background:rgba(255,255,255,.02)}
+
+.addr-name{
+  font-family:var(--sans);
+  font-weight:700;
+  font-size:14px;
+  color:#fff;
+  min-width:90px;
+}
+
+.addr-addr{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--silver);
+  flex:1;
+}
+
+.addr-actions{display:flex;gap:6px}
+
+.no-addrs{
+  padding:40px;
+  text-align:center;
+  font-size:12px;
+  color:rgba(138,155,176,.4);
+  font-style:italic;
+}
+
+.add-form{
+  display:grid;
+  grid-template-columns:80px 160px 1fr auto;
+  gap:8px;
+  padding:20px;
+  background:rgba(255,255,255,.02);
+  border-top:1px solid rgba(255,255,255,.06);
+  align-items:end;
+}
+
+.btn-add{
+  padding:12px 20px;
+  background:rgba(184,255,87,.1);
+  color:var(--lime);
+  border:1px solid rgba(184,255,87,.2);
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:1px;
+  cursor:pointer;
+  transition:all .15s;
+  white-space:nowrap;
+}
+.btn-add:hover{background:rgba(184,255,87,.2)}
+
+/* ── TERMINAL ── */
+.terminal{
+  background:#020508;
+  border:1px solid rgba(255,255,255,.06);
+  font-family:var(--mono);
+  font-size:12px;
+  height:220px;
+  overflow-y:auto;
+  padding:16px 20px;
+  line-height:1.9;
+}
+.terminal::-webkit-scrollbar{width:3px}
+.terminal::-webkit-scrollbar-track{background:transparent}
+.terminal::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1)}
+
+.log-t{color:rgba(138,155,176,.3);margin-right:10px}
+.log-info{color:var(--silver)}
+.log-ok{color:var(--lime)}
+.log-send{color:var(--sky)}
+.log-error{color:var(--rose)}
+.log-warn{color:var(--gold)}
+
+.cmd-row{
+  display:flex;
+  gap:8px;
+  margin-top:8px;
+}
+
+.cmds-quick{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:12px;
+}
+
+.cmd-chip{
+  padding:5px 12px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.06);
+  color:var(--silver);
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:1px;
+  cursor:pointer;
+  transition:all .15s;
+}
+.cmd-chip:hover{border-color:var(--sky);color:var(--sky)}
+
+/* ── TX RESULT ── */
+.tx-result{
+  display:none;
+  background:rgba(184,255,87,.04);
+  border:1px solid rgba(184,255,87,.2);
+  padding:16px 20px;
+  margin-top:12px;
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--lime);
+  line-height:1.8;
+  word-break:break-all;
+}
+.tx-link{color:var(--sky);text-decoration:none}
+.tx-link:hover{text-decoration:underline}
+
+/* ── CONFIRM OVERLAY ── */
+.overlay{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.8);
+  z-index:1000;
+  align-items:center;
+  justify-content:center;
+  backdrop-filter:blur(8px);
+}
+.overlay.show{display:flex}
+
+.confirm-card{
+  background:var(--steel);
+  border:1px solid rgba(255,255,255,.1);
+  width:100%;
+  max-width:460px;
+  animation:rise .2s ease;
+}
+@keyframes rise{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+
+.confirm-head{
+  padding:24px 28px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.confirm-head-icon{
+  width:36px;height:36px;
+  background:rgba(245,200,66,.1);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;
+}
+
+.confirm-head-title{
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:17px;
+  color:#fff;
+}
+
+.confirm-head-sub{
+  font-size:11px;
+  color:var(--silver);
+  margin-top:2px;
+}
+
+.confirm-body{padding:24px 28px}
+
+.confirm-field{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  padding:12px 0;
+  border-bottom:1px solid rgba(255,255,255,.04);
+  gap:16px;
+}
+.confirm-field:last-child{border-bottom:none}
+.cf-key{font-size:11px;color:var(--silver);letter-spacing:1px;text-transform:uppercase;white-space:nowrap}
+.cf-val{font-family:var(--mono);font-size:12px;color:var(--sky);text-align:right;word-break:break-all}
+.cf-val.big{font-family:var(--sans);font-size:20px;font-weight:800;color:var(--lime)}
+
+.confirm-warn{
+  background:rgba(245,200,66,.06);
+  border:1px solid rgba(245,200,66,.15);
+  padding:12px 16px;
+  font-size:11px;
+  color:var(--gold);
+  line-height:1.7;
+  margin:16px 0;
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+}
+
+.confirm-foot{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:0;
+  border-top:1px solid rgba(255,255,255,.06);
+}
+
+.btn-confirm-cancel{
+  padding:16px;
+  background:transparent;
+  color:var(--rose);
+  border:none;
+  border-right:1px solid rgba(255,255,255,.06);
+  font-family:var(--sans);
+  font-weight:700;
+  font-size:13px;
+  cursor:pointer;
+  transition:background .15s;
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+.btn-confirm-cancel:hover{background:rgba(255,87,87,.08)}
+
+.btn-confirm-ok{
+  padding:16px;
+  background:var(--lime);
+  color:var(--ink);
+  border:none;
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:13px;
+  cursor:pointer;
+  transition:background .15s;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-confirm-ok:hover{background:#d4ff2a}
+.btn-confirm-ok:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── FOOTER ── */
+footer{
+  border-top:1px solid rgba(255,255,255,.06);
+  padding:24px 0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-top:64px;
+}
+
+.footer-left{
+  font-size:11px;
+  color:rgba(138,155,176,.4);
+  line-height:1.8;
+}
+
+.footer-links{display:flex;gap:20px}
+.footer-link{
+  font-size:11px;
+  color:var(--silver);
+  text-decoration:none;
+  letter-spacing:1px;
+  transition:color .15s;
+}
+.footer-link:hover{color:var(--lime)}
+
+/* ── Spinner ── */
+.spin{
+  display:inline-block;
+  width:13px;height:13px;
+  border:2px solid rgba(10,14,18,.3);
+  border-top-color:var(--ink);
+  border-radius:50%;
+  animation:spinning .6s linear infinite;
+}
+@keyframes spinning{to{transform:rotate(360deg)}}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .hero{grid-template-columns:1fr}
+  .hero-left{border-right:none;border-bottom:1px solid rgba(255,255,255,.08);padding-right:0}
+  .hero-right{padding-left:0}
+  .dash-grid{grid-template-columns:1fr}
+  .field-row{grid-template-columns:1fr}
+  .add-form{grid-template-columns:1fr 1fr}
+  .connect-section{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="site">
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">
+    <div class="nav-logo-mark">V</div>
+    <div>
+      <div class="nav-logo-text">ESP32 Vault</div>
+      <span class="nav-logo-sub">Hardware Wallet</span>
+    </div>
+  </a>
+  <div class="nav-right">
+    <span class="badge-air">✦ Air-Gapped</span>
+    <button id="btn-connect" onclick="toggleConnect()">
+      <span class="dot" id="conn-dot"></span>
+      <span id="btn-label">Connect Device</span>
+    </button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-left">
+    <div class="hero-tag">Open Source · BIP32/BIP39 · AES-256</div>
+    <h1 class="hero-title">DIY Hardware<br><span>Crypto Wallet</span><br>on $3 chip.</h1>
+    <p class="hero-desc">Air-gapped signing device built on ESP32. Private keys never leave the hardware. Same architecture as Ledger — fully open source.</p>
+    <div class="hero-stats">
+      <div class="stat"><div class="stat-val">$3</div><div class="stat-key">Hardware Cost</div></div>
+      <div class="stat"><div class="stat-val">AES-256</div><div class="stat-key">Encryption</div></div>
+      <div class="stat"><div class="stat-val">0</div><div class="stat-key">Wireless Radios</div></div>
+    </div>
+  </div>
+  <div class="hero-right">
+    <div class="feature-row">
+      <div class="feature-icon">🔑</div>
+      <div><div class="feature-name">BIP39 Mnemonic</div><div class="feature-desc">12-word seed, 128-bit entropy. Compatible with MetaMask, Ledger.</div></div>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon">🔐</div>
+      <div><div class="feature-name">AES-256 Encrypted Storage</div><div class="feature-desc">Seed bound to chip eFuse MAC. Flash dump = useless ciphertext.</div></div>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon">📵</div>
+      <div><div class="feature-name">WiFi + BT Permanently Off</div><div class="feature-desc">Disabled at boot via ESP32 API. Zero radio exposure.</div></div>
+    </div>
+    <div class="feature-row">
+      <div class="feature-icon">🖐</div>
+      <div><div class="feature-name">Physical Confirmation</div><div class="feature-desc">Every transaction requires pressing OK on the hardware button.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- DISCONNECTED -->
+  <div id="screen-disconnected" class="show">
+    <div class="connect-section">
+      <div class="connect-left">
+        <div class="section-label">Get Started</div>
+        <div class="steps-list">
+          <div class="step-item"><div class="step-num">01</div><div class="step-text">Plug your <strong>ESP32 Vault</strong> into USB</div></div>
+          <div class="step-item"><div class="step-num">02</div><div class="step-text">Click <strong>Connect Device</strong> in the nav bar</div></div>
+          <div class="step-item"><div class="step-num">03</div><div class="step-text">Select the <strong>COM / tty port</strong> from the dialog</div></div>
+          <div class="step-item"><div class="step-num">04</div><div class="step-text">Enter your <strong>PIN</strong> on the device buttons</div></div>
+        </div>
+        <div class="connect-cta">
+          <button class="btn-main" onclick="toggleConnect()">⚡ Connect Now</button>
+          <a class="btn-ghost" href="https://github.com/OrDex78/esp32-vault" target="_blank">↗ GitHub</a>
+        </div>
+        <p class="compat-note">* Requires Chrome or Edge — Web Serial API</p>
+      </div>
+      <div class="connect-right">
+        <div class="section-label">Don't have a device?</div>
+        <div class="steps-list">
+          <div class="step-item"><div class="step-num">→</div><div class="step-text">Get an <strong>ESP32 DevKit</strong> (~$2 on AliExpress)</div></div>
+          <div class="step-item"><div class="step-num">→</div><div class="step-text">Get an <strong>SH1106 OLED 128×64</strong> (~$2)</div></div>
+          <div class="step-item"><div class="step-num">→</div><div class="step-text">Get <strong>3 push buttons</strong> (~$0.30)</div></div>
+          <div class="step-item"><div class="step-num">→</div><div class="step-text">Flash firmware via <strong>PlatformIO</strong></div></div>
+          <div class="step-item"><div class="step-num">→</div><div class="step-text">Full wiring + setup in <strong>README</strong></div></div>
+        </div>
+        <div class="connect-cta">
+          <a class="btn-ghost" href="https://github.com/OrDex78/esp32-vault#setup" target="_blank">📖 Read Docs</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETUP REQUIRED -->
+  <div id="screen-setup">
+    <div class="setup-banner">
+      <div class="setup-icon">🔑</div>
+      <div>
+        <div class="setup-title">Wallet Not Set Up</div>
+        <div class="setup-desc">
+          Connected to device but no wallet found. Run the Python companion to generate your seed.<br><br>
+          <code style="background:rgba(255,255,255,.06);padding:4px 8px;font-size:12px;">python companion.py --port COM6</code><br><br>
+          Choose <strong style="color:#fff;">option 1 (Setup wallet)</strong>, write down your 12 words, then set a PIN on the device buttons. Come back and reconnect.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="screen-dashboard">
+
+    <!-- Balance + Status row -->
+    <div class="dash-grid" style="margin-bottom:1px">
+      <div class="dash-cell">
+        <div class="cell-label">ETH Balance</div>
+        <div class="cell-val" id="eth-bal">—<span class="cell-unit"> ETH</span></div>
+        <div class="cell-actions">
+          <button class="btn-sm btn-sm-outline" onclick="fetchBalance()">↻ Refresh</button>
+        </div>
+      </div>
+      <div class="dash-cell">
+        <div class="cell-label">BTC Balance</div>
+        <div class="cell-val" id="btc-bal">—<span class="cell-unit"> BTC</span></div>
+      </div>
+      <div class="dash-cell">
+        <div class="cell-label">Device Status</div>
+        <div class="status-row"><div class="status-key">Connection</div><div class="status-badge sb-green" id="conn-status">ONLINE</div></div>
+        <div class="status-row"><div class="status-key">Wireless</div><div class="status-badge sb-green">DISABLED ✓</div></div>
+        <div class="status-row"><div class="status-key">Encryption</div><div class="status-badge sb-blue">AES-256</div></div>
+      </div>
+    </div>
+
+    <!-- Addresses row -->
+    <div class="dash-grid" style="margin-bottom:32px">
+      <div class="dash-cell" style="grid-column:span 2">
+        <div class="cell-label">Ethereum Address</div>
+        <div class="cell-addr" id="eth-addr">Fetching...</div>
+        <div class="cell-actions" style="margin-top:10px">
+          <button class="btn-sm btn-sm-outline" onclick="copyText('eth-addr',this)">Copy</button>
+          <a id="eth-scan" href="#" target="_blank" class="btn-sm btn-sm-solid" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">Etherscan ↗</a>
+        </div>
+      </div>
+      <div class="dash-cell">
+        <div class="cell-label">Bitcoin Address</div>
+        <div class="cell-addr" id="btc-addr">Fetching...</div>
+        <div class="cell-actions" style="margin-top:10px">
+          <button class="btn-sm btn-sm-outline" onclick="copyText('btc-addr',this)">Copy</button>
+          <a id="btc-scan" href="#" target="_blank" class="btn-sm btn-sm-solid" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">Blockchain ↗</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs-wrap">
+      <div class="tab active" onclick="tab('send')">Send ETH</div>
+      <div class="tab" onclick="tab('addresses')">Saved Addresses</div>
+      <div class="tab" onclick="tab('terminal')">Terminal</div>
+    </div>
+
+    <!-- Tab: Send -->
+    <div class="tab-pane active" id="pane-send">
+      <div style="display:grid;grid-template-columns:1fr 360px;gap:20px">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Send ETH</div>
+          </div>
+          <div class="panel-body">
+            <div class="field">
+              <label class="field-label">From Saved Address</label>
+              <select class="field-input" id="send-saved" onchange="fillSaved()">
+                <option value="">— Type destination manually —</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label class="field-label">Destination Address</label>
+                <input class="field-input" id="send-to" type="text" placeholder="0x..." spellcheck="false">
+              </div>
+              <div class="field">
+                <label class="field-label">Amount (ETH)</label>
+                <input class="field-input" id="send-amount" type="number" step="0.0001" min="0.0001" value="0.0001">
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">Infura RPC URL</label>
+              <input class="field-input" id="infura-url" type="text" value="https://mainnet.infura.io/v3/dd8216af6df54651b455d75ff20ca93c" placeholder="https://mainnet.infura.io/v3/YOUR_KEY">
+            </div>
+            <button class="btn-send" id="btn-send" onclick="initSend()">⚡ Send Transaction</button>
+            <div class="tx-result" id="tx-result"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">How it works</div></div>
+          <div class="panel-body">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div class="step-item"><div class="step-num">01</div><div class="step-text">App builds the transaction from your inputs</div></div>
+              <div class="step-item"><div class="step-num">02</div><div class="step-text">TX hash sent to ESP32 over USB serial</div></div>
+              <div class="step-item"><div class="step-num">03</div><div class="step-text">Device shows details on OLED display</div></div>
+              <div class="step-item"><div class="step-num">04</div><div class="step-text">Press <strong>OK button</strong> on device to sign</div></div>
+              <div class="step-item"><div class="step-num">05</div><div class="step-text">App broadcasts signed TX to Ethereum</div></div>
+            </div>
+            <div style="margin-top:20px;padding:12px 14px;background:rgba(184,255,87,.04);border:1px solid rgba(184,255,87,.1);font-size:11px;color:var(--lime);line-height:1.8">
+              ✓ Private key never transmitted<br>
+              ✓ You physically approve every TX
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Addresses -->
+    <div class="tab-pane" id="pane-addresses">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Saved Addresses</div>
+          <div style="font-size:11px;color:var(--silver)">Up to 5 stored on device</div>
+        </div>
+        <div id="addr-list"><div class="no-addrs">No saved addresses. Add one below.</div></div>
+        <div class="add-form">
+          <div class="field" style="margin-bottom:0">
+            <label class="field-label">Slot</label>
+            <input class="field-input" id="new-slot" type="number" min="0" max="4" value="0">
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label class="field-label">Nickname</label>
+            <input class="field-input" id="new-name" type="text" placeholder="Binance" maxlength="15">
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label class="field-label">ETH Address</label>
+            <input class="field-input" id="new-addr" type="text" placeholder="0x...">
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button class="btn-add" onclick="addAddr()">+ Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Terminal -->
+    <div class="tab-pane" id="pane-terminal">
+      <div class="section-label" style="margin-bottom:12px">Serial Monitor</div>
+      <div class="terminal" id="terminal"></div>
+      <div class="cmd-row" style="margin-top:8px">
+        <input class="field-input" id="cmd-in" type="text" placeholder="ADDR_ETH" onkeydown="if(event.key==='Enter')rawCmd()" style="flex:1">
+        <button class="btn-sm btn-sm-outline" style="padding:12px 18px" onclick="rawCmd()">Send</button>
+        <button class="btn-sm btn-sm-outline" style="padding:12px 18px" onclick="clrLog()">Clear</button>
+      </div>
+      <div class="cmds-quick">
+        <div class="cmd-chip" onclick="quick('ADDR_ETH')">ADDR_ETH</div>
+        <div class="cmd-chip" onclick="quick('ADDR_BTC')">ADDR_BTC</div>
+        <div class="cmd-chip" onclick="quick('LISTADDR')">LISTADDR</div>
+        <div class="cmd-chip" onclick="quick('SEND_WORDS')" style="color:var(--gold);border-color:rgba(245,200,66,.2)">SEND_WORDS</div>
+      </div>
+    </div>
+
+  </div><!-- /dashboard -->
+
+</main>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-left">
+    ESP32 Vault — Open Source Hardware Wallet<br>
+    Built by Gaurav Sharma · MIT License · Not financial advice
+  </div>
+  <div class="footer-links">
+    <a class="footer-link" href="https://github.com/OrDex78/esp32-vault" target="_blank">GitHub ↗</a>
+    <a class="footer-link" href="https://github.com/OrDex78/esp32-vault#readme" target="_blank">Docs ↗</a>
+    <a class="footer-link" href="https://twitter.com/OrDex78" target="_blank">Twitter ↗</a>
+  </div>
+</footer>
+
+</div><!-- /site -->
+
+<!-- CONFIRM OVERLAY -->
+<div class="overlay" id="overlay">
+  <div class="confirm-card">
+    <div class="confirm-head">
+      <div class="confirm-head-icon">⚡</div>
+      <div>
+        <div class="confirm-head-title">Confirm Transaction</div>
+        <div class="confirm-head-sub">Review details carefully before signing</div>
+      </div>
+    </div>
+    <div class="confirm-body">
+      <div class="confirm-field">
+        <div class="cf-key">To</div>
+        <div class="cf-val" id="cf-to">—</div>
+      </div>
+      <div class="confirm-field">
+        <div class="cf-key">Amount</div>
+        <div class="cf-val big" id="cf-amt">—</div>
+      </div>
+      <div class="confirm-field">
+        <div class="cf-key">Network</div>
+        <div class="cf-val">Ethereum Mainnet</div>
+      </div>
+      <div class="confirm-warn">
+        ⚠ Check your ESP32 OLED screen and press the physical OK button to sign. Press UP to reject.
+      </div>
+    </div>
+    <div class="confirm-foot">
+      <button class="btn-confirm-cancel" onclick="cancelSend()">✕ Cancel</button>
+      <button class="btn-confirm-ok" id="btn-ok" onclick="confirmSend()">
+        <span id="ok-spin" class="spin" style="display:none;border-color:rgba(10,14,18,.3);border-top-color:var(--ink)"></span>
+        Sign on Device
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══ Serial ══════════════════════════════════════════════════
+let port,reader,writer,connected=false;
+let buf='',resolvers={},savedAddrs=[],pendingTx=null;
+window._wCheck=null;
+
+async function toggleConnect(){
+  connected?await disconnect():await connect();
+}
+
+async function connect(){
+  if(!('serial' in navigator)){log('Web Serial not supported. Use Chrome/Edge.','error');return}
+  try{
+    port=await navigator.serial.requestPort();
+    await port.open({baudRate:115200});
+    writer=port.writable.getWriter();
+    reader=port.readable.getReader();
+    connected=true;
+    setUI(true);
+    log('Connected','ok');
+    readLoop();
+    setTimeout(checkWallet,1500);
+  }catch(e){log('Connection failed: '+e.message,'error')}
+}
+
+async function disconnect(){
+  connected=false;
+  try{if(reader)await reader.cancel();if(writer)writer.releaseLock();if(port)await port.close();}catch(e){}
+  reader=writer=port=null;
+  setUI(false);
+  log('Disconnected','warn');
+}
+
+function setUI(on){
+  document.getElementById('conn-dot').className='dot'+(on?' live':'');
+  document.getElementById('btn-label').textContent=on?'Disconnect':'Connect Device';
+  document.getElementById('btn-connect').className=on?'connected':'';
+  if(!on){
+    show('disconnected');
+    hide('setup');hide('dashboard');
+  }
+}
+
+async function readLoop(){
+  while(connected&&reader){
+    try{
+      const{value,done}=await reader.read();
+      if(done)break;
+      buf+=new TextDecoder().decode(value);
+      let nl;
+      while((nl=buf.indexOf('\n'))>=0){
+        const line=buf.slice(0,nl).trim();
+        buf=buf.slice(nl+1);
+        if(line)onMsg(line);
+      }
+    }catch(e){if(connected)log('Read err: '+e,'error');break}
+  }
+}
+
+async function send(cmd){
+  if(!writer)return;
+  log('→ '+cmd,'send');
+  await writer.write(new TextEncoder().encode(cmd+'\n'));
+}
+
+function onMsg(line){
+  log('← '+line,line.startsWith('ERR')?'error':'ok');
+  if(window._wCheck){window._wCheck(line);}
+  for(const[k,res]of Object.entries(resolvers)){
+    if(line.startsWith(k)){delete resolvers[k];res(line);break}
+  }
+  if(line.startsWith('ETH:')){
+    const a=line.slice(4);
+    document.getElementById('eth-addr').textContent=a;
+    document.getElementById('eth-scan').href='https://etherscan.io/address/'+a;
+  }
+  if(line.startsWith('BTC:')){
+    const a=line.slice(4);
+    document.getElementById('btc-addr').textContent=a;
+    document.getElementById('btc-scan').href='https://www.blockchain.com/btc/address/'+a;
+  }
+  if(line.startsWith('SIG:'))broadcastTx(line.slice(4));
+  if(line.startsWith('TX:')){showTxOk(line.slice(3));cancelSend();}
+  if(line.startsWith('ERR:')&&pendingTx){cancelSend();}
+}
+
+// ══ Wallet check ════════════════════════════════════════════
+async function checkWallet(){
+  return new Promise(res=>{
+    let done=false;
+    const t=setTimeout(()=>{if(!done){done=true;showSetup();res();}},5000);
+    window._wCheck=line=>{
+      if(done)return;
+      if(line.startsWith('ETH:')){done=true;clearTimeout(t);showDash();setTimeout(()=>send('ADDR_BTC'),300);setTimeout(loadAddrs,600);res();}
+      else if(line.startsWith('ERR:no seed')){done=true;clearTimeout(t);showSetup();res();}
+    };
+    send('ADDR_ETH');
+  });
+}
+
+function showDash(){hide('disconnected');hide('setup');show('dashboard');}
+function showSetup(){hide('disconnected');hide('dashboard');show('setup');}
+function show(id){document.getElementById('screen-'+id).className=document.getElementById('screen-'+id).className.replace('show','')+' show';}
+function hide(id){document.getElementById('screen-'+id).className=document.getElementById('screen-'+id).className.replace(' show','').replace('show','');}
+
+// ══ Balance ══════════════════════════════════════════════════
+async function fetchBalance(){
+  const addr=document.getElementById('eth-addr').textContent;
+  const btcAddr=document.getElementById('btc-addr').textContent;
+  if(!addr||addr==='Fetching...')return;
+  const infura=document.getElementById('infura-url').value;
+  document.getElementById('eth-bal').innerHTML='<span class="spin"></span>';
+  try{
+    const r=await fetch(infura,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1})});
+    const d=await r.json();
+    const eth=(Number(BigInt(d.result||'0x0'))/1e18).toFixed(6);
+    document.getElementById('eth-bal').innerHTML=eth+'<span class="cell-unit"> ETH</span>';
+  }catch(e){document.getElementById('eth-bal').innerHTML='Error<span class="cell-unit"> ETH</span>';}
+  try{
+    const r=await fetch('https://blockstream.info/api/address/'+btcAddr);
+    const d=await r.json();
+    const sat=(d.chain_stats?.funded_txo_sum||0)-(d.chain_stats?.spent_txo_sum||0);
+    document.getElementById('btc-bal').innerHTML=(sat/1e8).toFixed(8)+'<span class="cell-unit"> BTC</span>';
+  }catch(e){}
+}
+
+// ══ Send ═════════════════════════════════════════════════════
+function initSend(){
+  const to=document.getElementById('send-to').value.trim();
+  const amt=parseFloat(document.getElementById('send-amount').value);
+  if(!to||!to.startsWith('0x')){log('Invalid address','error');return}
+  if(!amt||amt<=0){log('Invalid amount','error');return}
+  document.getElementById('cf-to').textContent=to.slice(0,12)+'...'+to.slice(-8);
+  document.getElementById('cf-amt').textContent=amt.toFixed(4)+' ETH';
+  document.getElementById('overlay').classList.add('show');
+  pendingTx={to,amt,infura:document.getElementById('infura-url').value};
+}
+
+async function confirmSend(){
+  if(!pendingTx)return;
+  document.getElementById('ok-spin').style.display='inline-block';
+  document.getElementById('btn-ok').disabled=true;
+  try{
+    const ethAddr=document.getElementById('eth-addr').textContent;
+    const{to,amt,infura}=pendingTx;
+    const amtStr=amt.toFixed(4)+' ETH';
+    await send('SEND_REQUEST:'+to+':'+amtStr);
+    log('Waiting for device signature...','warn');
+  }catch(e){
+    log('Error: '+e.message,'error');
+    document.getElementById('ok-spin').style.display='none';
+    document.getElementById('btn-ok').disabled=false;
+  }
+}
+
+async function broadcastTx(sigHex){
+  document.getElementById('overlay').classList.remove('show');
+  log('Signature received: '+sigHex.slice(0,20)+'...','ok');
+  log('Broadcast via companion.py or check terminal','warn');
+}
+
+function showTxOk(hash){
+  const el=document.getElementById('tx-result');
+  el.style.display='block';
+  el.innerHTML='✓ Transaction sent!<br><a class="tx-link" href="https://etherscan.io/tx/'+hash+'" target="_blank">'+hash.slice(0,24)+'...'+hash.slice(-8)+' ↗</a>';
+}
+
+function cancelSend(){
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('ok-spin').style.display='none';
+  document.getElementById('btn-ok').disabled=false;
+  pendingTx=null;
+}
+
+// ══ Addresses ════════════════════════════════════════════════
+async function loadAddrs(){await send('LISTADDR')}
+
+async function addAddr(){
+  const slot=document.getElementById('new-slot').value;
+  const name=document.getElementById('new-name').value.trim();
+  const addr=document.getElementById('new-addr').value.trim();
+  if(!name||!addr){log('Fill all fields','error');return}
+  await send('SAVEADDR:'+slot+':'+name+':'+addr);
+  savedAddrs[parseInt(slot)]={name,addr};
+  renderAddrs();updateDropdown();
+  document.getElementById('new-name').value='';
+  document.getElementById('new-addr').value='';
+}
+
+function renderAddrs(){
+  const el=document.getElementById('addr-list');
+  const items=savedAddrs.filter(Boolean);
+  if(!items.length){el.innerHTML='<div class="no-addrs">No saved addresses. Add one below.</div>';return}
+  el.innerHTML=savedAddrs.map((a,i)=>a?`
+    <div class="addr-item">
+      <div class="addr-name">${a.name}</div>
+      <div class="addr-addr">${a.addr.slice(0,16)}...${a.addr.slice(-8)}</div>
+      <div class="addr-actions">
+        <button class="btn-sm btn-sm-outline" onclick="useAddr(${i})">Use</button>
+        <button class="btn-sm btn-sm-outline" onclick="navigator.clipboard.writeText('${a.addr}');this.textContent='✓'">Copy</button>
+      </div>
+    </div>`:'').join('');
+}
+
+function updateDropdown(){
+  const sel=document.getElementById('send-saved');
+  sel.innerHTML='<option value="">— Type destination manually —</option>';
+  savedAddrs.forEach((a,i)=>{if(a)sel.innerHTML+=`<option value="${i}">${a.name} — ${a.addr.slice(0,12)}...</option>`});
+}
+
+function useAddr(i){document.getElementById('send-to').value=savedAddrs[i].addr;tab('send')}
+function fillSaved(){const i=document.getElementById('send-saved').value;if(i!==''&&savedAddrs[i])document.getElementById('send-to').value=savedAddrs[i].addr}
+
+// ══ Terminal ═════════════════════════════════════════════════
+function log(msg,type='info'){
+  const el=document.getElementById('terminal');
+  if(!el)return;
+  const t=new Date().toTimeString().slice(0,8);
+  const s=document.createElement('span');
+  s.innerHTML='<span class="log-t">'+t+'</span><span class="log-'+type+'">'+esc(msg)+'</span><br>';
+  el.appendChild(s);
+  el.scrollTop=el.scrollHeight;
+}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function clrLog(){const el=document.getElementById('terminal');if(el)el.innerHTML=''}
+async function rawCmd(){const el=document.getElementById('cmd-in');await send(el.value.trim());el.value=''}
+async function quick(cmd){await send(cmd);tab('terminal')}
+
+// ══ Tabs ═════════════════════════════════════════════════════
+function tab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    const n=['send','addresses','terminal'];
+    t.classList.toggle('active',n[i]===name);
+  });
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.getElementById('pane-'+name).classList.add('active');
+}
+
+// ══ Utils ════════════════════════════════════════════════════
+function copyText(id,btn){
+  navigator.clipboard.writeText(document.getElementById(id).textContent);
+  btn.textContent='✓ Copied';btn.classList.add('copied');
+  setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied')},2000);
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cancelSend()});
+log('ESP32 Vault companion ready','info');
+log('Connect your device to get started','info');
+</script>
+</body>
+</html>
